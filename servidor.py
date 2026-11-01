@@ -1,4 +1,5 @@
 import socket
+import threading
 from collections import deque
 
 LIMITE_RECADOS = 10
@@ -6,19 +7,23 @@ LIMITE_CARACTERES = 120
 
 mural = deque(maxlen=LIMITE_RECADOS)
 proximo_id = 1
+trava = threading.Lock()
 
 
 def publicar(autor, texto):
     global proximo_id
-    novo_id = proximo_id
-    mural.append((novo_id, autor, texto))
-    proximo_id += 1
+    with trava:
+        novo_id = proximo_id
+        mural.append((novo_id, autor, texto))
+        proximo_id += 1
     return novo_id
 
 
 def montar_feed():
+    with trava:
+        recados = list(mural)
     linhas = []
-    for id_recado, autor, texto in mural:
+    for id_recado, autor, texto in recados:
         linhas.append(f"{id_recado}|{autor}|{texto}")
     linhas.append("FIM")
     return "\n".join(linhas) + "\n"
@@ -45,6 +50,23 @@ def tratar_pedido(linha):
     return "ERRO|Comando desconhecido\n"
 
 
+def atender_cliente(conexao, endereco):
+    print(f"Cliente conectado: {endereco}")
+    leitor = conexao.makefile("r", encoding="utf-8")
+    try:
+        for linha in leitor:
+            linha = linha.strip()
+            print(f"Recebido de {endereco}: {linha}")
+            resposta = tratar_pedido(linha)
+            conexao.sendall(resposta.encode("utf-8"))
+    except (ConnectionResetError, BrokenPipeError):
+        print(f"Conexao perdida com {endereco}")
+    finally:
+        leitor.close()
+        conexao.close()
+        print(f"Cliente desconectado: {endereco}")
+
+
 ip = input("IP de escuta: ")
 porta = int(input("Porta: "))
 
@@ -54,15 +76,12 @@ servidor.bind((ip, porta))
 servidor.listen()
 print(f"Servidor escutando em {ip}:{porta}")
 
-while True:
-    conexao, endereco = servidor.accept()
-    print(f"Cliente conectado: {endereco}")
-    leitor = conexao.makefile("r", encoding="utf-8")
-    for linha in leitor:
-        linha = linha.strip()
-        print(f"Recebido de {endereco}: {linha}")
-        resposta = tratar_pedido(linha)
-        conexao.sendall(resposta.encode("utf-8"))
-    print(f"Cliente desconectado: {endereco}")
-    leitor.close()
-    conexao.close()
+try:
+    while True:
+        conexao, endereco = servidor.accept()
+        fio = threading.Thread(target=atender_cliente, args=(conexao, endereco), daemon=True)
+        fio.start()
+except KeyboardInterrupt:
+    print("\nServidor encerrado.")
+finally:
+    servidor.close()
