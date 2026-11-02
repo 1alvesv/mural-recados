@@ -4,10 +4,36 @@ from collections import deque
 
 LIMITE_RECADOS = 10
 LIMITE_CARACTERES = 120
+ARQUIVO = "mural_avisos.txt"
 
 mural = deque(maxlen=LIMITE_RECADOS)
 proximo_id = 1
 trava = threading.Lock()
+
+
+def carregar_mural():
+    global proximo_id
+    try:
+        with open(ARQUIVO, "r", encoding="utf-8") as arquivo:
+            for linha in arquivo:
+                linha = linha.strip()
+                if linha == "":
+                    continue
+                try:
+                    id_recado, autor, texto = linha.split("|", 2)
+                    mural.append((int(id_recado), autor, texto))
+                    proximo_id = int(id_recado) + 1
+                except ValueError:
+                    print(f"Linha invalida ignorada no arquivo: {linha}")
+        print(f"{len(mural)} aviso(s) restaurado(s) de {ARQUIVO}")
+    except FileNotFoundError:
+        print("Nenhum arquivo de mural encontrado, comecando vazio.")
+
+
+def salvar_mural():
+    with open(ARQUIVO, "w", encoding="utf-8") as arquivo:
+        for id_recado, autor, texto in mural:
+            arquivo.write(f"{id_recado}|{autor}|{texto}\n")
 
 
 def publicar(autor, texto):
@@ -16,6 +42,7 @@ def publicar(autor, texto):
         novo_id = proximo_id
         mural.append((novo_id, autor, texto))
         proximo_id += 1
+        salvar_mural()
     return novo_id
 
 
@@ -66,6 +93,8 @@ def atender_cliente(conexao, endereco):
         conexao.close()
         print(f"Cliente desconectado: {endereco}")
 
+
+carregar_mural()
 
 ip = input("IP de escuta: ")
 porta = int(input("Porta: "))
