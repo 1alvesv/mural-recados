@@ -1,3 +1,4 @@
+import re
 import socket
 import threading
 from collections import deque
@@ -5,10 +6,18 @@ from collections import deque
 LIMITE_RECADOS = 10
 LIMITE_CARACTERES = 120
 ARQUIVO = "mural_avisos.txt"
+PALAVRAS_PROIBIDAS = ["banana", "abacaxi", "pizza", "chocolate", "fofoca", "spoiler", "gabarito", "bagunca", "bagunça"]
 
 mural = deque(maxlen=LIMITE_RECADOS)
 proximo_id = 1
 trava = threading.Lock()
+
+
+def filtrar_texto(texto):
+    for palavra in PALAVRAS_PROIBIDAS:
+        padrao = r"\b" + re.escape(palavra) + r"\b"
+        texto = re.sub(padrao, "***", texto, flags=re.IGNORECASE)
+    return texto
 
 
 def carregar_mural():
@@ -72,6 +81,7 @@ def tratar_pedido(linha):
             return "ERRO|O nome do autor nao pode ter o caractere |\n"
         if len(texto) > LIMITE_CARACTERES:
             return f"ERRO|Mensagem acima de {LIMITE_CARACTERES} caracteres\n"
+        texto = filtrar_texto(texto)
         novo_id = publicar(autor, texto)
         return f"OK|{novo_id}\n"
     return "ERRO|Comando desconhecido\n"
